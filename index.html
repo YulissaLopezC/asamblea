@@ -772,7 +772,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 // ═══════════════════════════════════════════════════════
 const CONFIG = {
   orgName:    'Mi Asociación',          // Nombre de tu asociación
-  scriptUrl:  'https://script.google.com/macros/s/AKfycbxKdhiU2Xfpj_-uyWj_GVhwj3H40SfJk45_OjIec5B-M3vr0OBBaxJmONIDO_g39PD6/exec',
+  scriptUrl:  'https://script.google.com/macros/s/AKfycbwLPTZsQkIBI7FHble3g7jL6XvAkxr3GU2bESutNWmJHjVd5lNsaeIyMVPiHxTw02Dl/exec',
   passAdmin:  'admin2024',              // Clave admin (también cámbiala en Code.gs)
   passMod:    'mod2024',                // Clave moderador
 };
@@ -798,16 +798,14 @@ document.addEventListener('DOMContentLoaded', () => {
   renderLoginField();
 });
 
+
 // ═══════════════════════════════════════════════════════
-//  API
+//  API — GET para evitar CORS con Apps Script
 // ═══════════════════════════════════════════════════════
 async function api(action, params = {}) {
-  const res = await fetch(CONFIG.scriptUrl, {
-    method: 'POST',
-    redirect: 'follow',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action, ...params })
-  });
+  const payload = encodeURIComponent(JSON.stringify({ action, ...params }));
+  const url = CONFIG.scriptUrl + "?payload=" + payload;
+  const res = await fetch(url, { redirect: "follow" });
   return res.json();
 }
 
