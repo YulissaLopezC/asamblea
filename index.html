@@ -174,6 +174,17 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
   <nav class="tab-bar" id="tab-bar"></nav>
   <main class="app-main">
 
+
+    <!-- Asistencia votante -->
+    <div class="section" id="sec-asistencia">
+      <div id="asistencia-votante-content"></div>
+    </div>
+
+    <!-- Quorum moderador y admin -->
+    <div class="section" id="sec-quorum">
+      <div id="quorum-content"></div>
+    </div>
+
     <!-- Votar -->
     <div class="section" id="sec-votar"><div id="votar-content"></div></div>
 
@@ -311,8 +322,8 @@ import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, deleteD
 // ── CONFIG ────────────────────────────────────────────
 const CONFIG = {
   orgName:   'Mi Asociación',
-  passAdmin: 'admin2024',
-  passMod:   'mod2024',
+  passAdmin: 'scmt2026',
+  passMod:   'scmt2026',
 };
 
 const firebaseConfig = {
@@ -330,16 +341,16 @@ const db  = getFirestore(app);
 // ── STATE ─────────────────────────────────────────────
 let currentUser = null;
 let selectedRole = 'votante';
-let DB = { asociados:[], cargos:[], candidatos:[], propuestas:[], votaciones:[], votos:[], poderes:[], postulaciones:[] };
+let DB = { asociados:[], cargos:[], candidatos:[], propuestas:[], votaciones:[], votos:[], poderes:[], postulaciones:[], asistencias:[] };
 let voteSel = {};
 let unsubscribers = [];
 
 // ── TABS ──────────────────────────────────────────────
 const TABS_DEF = {
-  votante:   [{id:'votar',label:'🗳️ Votar'},{id:'postularse',label:'🙋 Postularme'},{id:'resultados',label:'📊 Resultados'}],
-  moderador: [{id:'moderador',label:'⚖️ Control'},{id:'resultados',label:'📊 Resultados'}],
+  votante:   [{id:'asistencia',label:'✋ Asistencia'},{id:'votar',label:'🗳️ Votar'},{id:'postularse',label:'🙋 Postularme'},{id:'resultados',label:'📊 Resultados'}],
+  moderador: [{id:'moderador',label:'⚖️ Control'},{id:'quorum',label:'👥 Quórum'},{id:'resultados',label:'📊 Resultados'}],
   admin: [
-    {id:'asociados',label:'👥 Asociados'},
+    {id:'quorum',label:'👥 Quórum'},{id:'asociados',label:'👥 Asociados'},
     {id:'poderes',label:'⚡ Poderes'},
     {id:'cargos',label:'🏅 Cargos'},
     {id:'postulaciones',label:'📋 Postulaciones'},
@@ -456,14 +467,14 @@ function logout() {
 
 // ── LOAD ALL ──────────────────────────────────────────
 async function loadAll() {
-  const [a,cg,cd,p,v,vt,pd,ps] = await Promise.all([
+  const [a,cg,cd,p,v,vt,pd,ps,ast] = await Promise.all([
     fsGet('asociados'), fsGet('cargos'), fsGet('candidatos'),
     fsGet('propuestas'), fsGet('votaciones'), fsGet('votos'),
-    fsGet('poderes'), fsGet('postulaciones')
+    fsGet('poderes'), fsGet('postulaciones'), fsGet('asistencias')
   ]);
   DB.asociados=a; DB.cargos=cg; DB.candidatos=cd;
   DB.propuestas=p; DB.votaciones=v; DB.votos=vt;
-  DB.poderes=pd; DB.postulaciones=ps;
+  DB.poderes=pd; DB.postulaciones=ps; DB.asistencias=ast; DB.asistencias=ast;
 }
 
 // ── REALTIME ──────────────────────────────────────────
@@ -487,7 +498,11 @@ function startRealtime() {
     DB.candidatos = snap.docs.map(d => ({id:d.id,...d.data()}));
     renderCargosList(); renderVotar(); renderResultados();
   });
-  unsubscribers = [u1,u2,u3,u4];
+  const u5 = onSnapshot(collection(db,'asistencias'), snap => {
+    DB.asistencias = snap.docs.map(d => ({id:d.id,...d.data()}));
+    renderAsistenciaVotante(); renderQuorum();
+  });
+  unsubscribers = [u1,u2,u3,u4,u5];
 }
 
 // ── TABS ──────────────────────────────────────────────
@@ -521,6 +536,7 @@ function renderAll() {
   renderAsociados(); renderPoderesSelects(); renderPoderesList();
   renderCargosList(); renderPropuestasList(); renderVotacionesAdmin();
   renderVotSubtipo(); renderVotar(); renderPostularse();
+  renderAsistenciaVotante(); renderQuorum();
   renderPostulacionesAdmin(); renderModerador(); renderResultados();
 }
 
@@ -983,6 +999,128 @@ function renderResultados() {
     </div>`;
   }).join('');
 }
+
+
+// ── ASISTENCIA ────────────────────────────────────────
+function calcQuorum() {
+  const totalActivos = DB.asociados.filter(a => a.estado === 'activo').length;
+  const quorumNecesario = Math.floor(totalActivos / 2) + 1;
+  // Peso total de asistentes (persona + poderes)
+  const otorgantes = new Set(DB.poderes.map(p => p.otorganteId));
+  const pesoPresente = DB.asistencias.reduce((s, a) => {
+    const as = DB.asociados.find(x => x.id === a.asociadoId);
+    if (!as || otorgantes.has(as.id)) return s;
+    return s + calcPesoAsociado(a.asociadoId);
+  }, 0);
+  const personasPresentes = DB.asistencias.length;
+  const quorumAlcanzado = pesoPresente >= quorumNecesario;
+  return { totalActivos, quorumNecesario, pesoPresente, personasPresentes, quorumAlcanzado };
+}
+
+function renderAsistenciaVotante() {
+  const c = document.getElementById('asistencia-votante-content'); if (!c) return;
+  const yaRegistrado = DB.asistencias.find(a => a.asociadoId === currentUser.id);
+  const q = calcQuorum();
+  const pct = q.totalActivos > 0 ? Math.round(q.pesoPresente / q.totalActivos * 100) : 0;
+
+  c.innerHTML = `
+    <div class="vote-card" style="text-align:center; padding:32px 20px; margin-bottom:16px">
+      ${yaRegistrado ? `
+        <div style="font-size:48px; margin-bottom:12px">✅</div>
+        <div style="font-family:'Cormorant Garamond',serif; font-size:22px; margin-bottom:8px">Asistencia registrada</div>
+        <div style="font-size:13px; color:var(--text-dim)">Tu presencia ha sido confirmada en la asamblea.</div>
+        ${currentUser.peso > 0 ? `<div class="vote-weight-chip" style="margin-top:14px">⚡ Representas ${1+currentUser.peso} votos</div>` : ''}
+      ` : `
+        <div style="font-size:48px; margin-bottom:12px">✋</div>
+        <div style="font-family:'Cormorant Garamond',serif; font-size:22px; margin-bottom:8px">Confirmar asistencia</div>
+        <div style="font-size:13px; color:var(--text-dim); margin-bottom:20px">Registra tu presencia para que cuente en el quórum.</div>
+        <button class="btn btn-primary" onclick="registrarAsistencia()">✋ Confirmar mi asistencia</button>
+      `}
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px">👥 Estado del Quórum</div>
+      <div class="vote-progress">
+        <span>Presentes:</span>
+        <strong>${q.pesoPresente} / ${q.totalActivos} votos (${pct}%)</strong>
+      </div>
+      <div class="result-bar" style="margin-bottom:10px">
+        <div class="result-fill" style="width:${Math.min(pct,100)}%; background:${q.quorumAlcanzado?'linear-gradient(90deg,var(--green),var(--green-lt))':'linear-gradient(90deg,var(--gold),var(--gold-lt))'}"></div>
+      </div>
+      <div style="font-size:13px; color:var(--text-dim); margin-bottom:10px">Quórum necesario: <strong style="color:var(--text)">${q.quorumNecesario} votos</strong></div>
+      <div class="alert ${q.quorumAlcanzado ? 'alert-success' : 'alert-info'}" style="margin-bottom:0">
+        ${q.quorumAlcanzado ? '✅ Quórum alcanzado — la asamblea puede iniciar' : `⏳ Faltan ${q.quorumNecesario - q.pesoPresente} voto(s) para alcanzar el quórum`}
+      </div>
+    </div>`;
+}
+
+window.registrarAsistencia = async function() {
+  if (DB.asistencias.find(a => a.asociadoId === currentUser.id)) { toast('⚠️ Ya registraste tu asistencia'); return; }
+  setLoading(true);
+  await fsAdd('asistencias', { asociadoId: currentUser.id, nombre: currentUser.nombre, _ts: Date.now() });
+  DB.asistencias = await fsGet('asistencias');
+  setLoading(false);
+  toast('✅ Asistencia registrada');
+  renderAsistenciaVotante();
+};
+
+function renderQuorum() {
+  const c = document.getElementById('quorum-content'); if (!c) return;
+  const q = calcQuorum();
+  const pct = q.totalActivos > 0 ? Math.round(q.pesoPresente / q.totalActivos * 100) : 0;
+
+  // Lista de presentes
+  const presentes = DB.asistencias.map(a => {
+    const as = DB.asociados.find(x => x.id === a.asociadoId);
+    const peso = calcPesoAsociado(a.asociadoId);
+    return as ? `<div class="list-item">
+      <div class="list-item-row">
+        <div>
+          <div class="list-item-name">${as.nombre}</div>
+          <div class="list-item-meta">Doc: ${as.doc} ${peso > 1 ? `&nbsp;<span class="badge badge-power">⚡ ${peso} votos</span>` : ''}</div>
+        </div>
+        ${currentUser.rol === 'admin' ? `<button class="btn btn-danger btn-sm btn-icon" onclick="quitarAsistencia('${a.id}')">🗑️</button>` : ''}
+      </div>
+    </div>` : '';
+  }).join('');
+
+  c.innerHTML = `
+    <div class="card">
+      <div class="card-title" style="margin-bottom:16px">📊 Panel de Quórum</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px">
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:var(--radius); padding:14px; text-align:center">
+          <div style="font-size:28px; font-weight:700; color:var(--gold)">${q.personasPresentes}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:4px">Personas presentes</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:var(--radius); padding:14px; text-align:center">
+          <div style="font-size:28px; font-weight:700; color:var(--gold)">${q.pesoPresente}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:4px">Votos representados</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:var(--radius); padding:14px; text-align:center">
+          <div style="font-size:28px; font-weight:700; color:var(--text)">${q.totalActivos}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:4px">Total asociados activos</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:var(--radius); padding:14px; text-align:center">
+          <div style="font-size:28px; font-weight:700; color:var(--text)">${q.quorumNecesario}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:4px">Quórum necesario</div>
+        </div>
+      </div>
+      <div class="result-bar" style="margin-bottom:10px; height:12px">
+        <div class="result-fill" style="width:${Math.min(pct,100)}%; height:100%; background:${q.quorumAlcanzado?'linear-gradient(90deg,var(--green),var(--green-lt))':'linear-gradient(90deg,var(--gold),var(--gold-lt))'}"></div>
+      </div>
+      <div class="alert ${q.quorumAlcanzado ? 'alert-success' : 'alert-info'}" style="margin-bottom:16px; font-size:14px; font-weight:600">
+        ${q.quorumAlcanzado ? '✅ QUÓRUM ALCANZADO — La asamblea puede iniciar' : `⏳ Faltan ${q.quorumNecesario - q.pesoPresente} voto(s) para el quórum`}
+      </div>
+      <div style="font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px">Asistentes registrados</div>
+      ${presentes || '<div class="empty-state" style="padding:20px"><div class="empty-icon">👥</div><div class="empty-text">Nadie ha registrado asistencia aún</div></div>'}
+    </div>`;
+}
+
+window.quitarAsistencia = async function(id) {
+  if (!confirm('¿Quitar esta asistencia?')) return;
+  await fsDel('asistencias', id);
+  DB.asistencias = await fsGet('asistencias');
+  renderQuorum(); toast('🗑️ Asistencia eliminada');
+};
 
 // ── EXPORTAR CSV ──────────────────────────────────────
 window.exportarCSV = function() {
