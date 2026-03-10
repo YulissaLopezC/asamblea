@@ -2,9 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Asamblea Digital</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
 <style>
 :root {
   --bg:#0c0f1a; --surface:#131729; --surface2:#1c2238;
@@ -142,12 +146,12 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
   <div class="login-box">
     <div class="login-label">Seleccione su rol</div>
     <div class="role-grid">
-      <button class="role-card active" onclick="setRole('votante',this)"><span class="role-icon">🗳️</span>Votante</button>
-      <button class="role-card" onclick="setRole('moderador',this)"><span class="role-icon">⚖️</span>Moderador</button>
-      <button class="role-card" onclick="setRole('admin',this)"><span class="role-icon">🔧</span>Admin</button>
+      <button class="role-card active" onclick="window._setRole('votante',this)"><span class="role-icon">🗳️</span>Votante</button>
+      <button class="role-card" onclick="window._setRole('moderador',this)"><span class="role-icon">⚖️</span>Moderador</button>
+      <button class="role-card" onclick="window._setRole('admin',this)"><span class="role-icon">🔧</span>Admin</button>
     </div>
     <div id="login-field-wrap"></div>
-    <button class="btn btn-primary btn-full" onclick="doLogin()" style="margin-top:4px">Ingresar →</button>
+    <button class="btn btn-primary btn-full" onclick="window._doLogin()" style="margin-top:4px">Ingresar →</button>
     <div id="login-err" style="display:none;margin-top:12px"></div>
   </div>
 </div>
@@ -397,6 +401,7 @@ function renderLoginField() {
   document.getElementById('login-err').style.display = 'none';
 }
 window._doLogin = doLogin;
+window._setRole = setRole;
 
 async function doLogin() {
   const val = document.getElementById('login-val').value.trim();
