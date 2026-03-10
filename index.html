@@ -602,6 +602,16 @@ window.addAsociado = async function() {
   renderAsociados(); renderPoderesSelects();
   toast('✅ Asociado registrado');
 };
+window.toggleEstado = async function(id, estadoActual) {
+  const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+  const as = DB.asociados.find(a => a.id === id);
+  if (!confirm(`¿Cambiar estado de "${as?.nombre}" a ${nuevoEstado}?`)) return;
+  await fsUpdate('asociados', id, { estado: nuevoEstado });
+  DB.asociados = await fsGet('asociados');
+  renderAsociados(); renderPoderesSelects();
+  toast(`✅ ${as?.nombre} ahora está ${nuevoEstado}`);
+};
+
 window.delAsociado = async function(id) {
   if (!confirm('¿Eliminar?')) return;
   await fsDel('asociados', id);
@@ -627,6 +637,7 @@ function renderAsociados() {
         ${peso>1?`&nbsp;<span class="badge badge-power">⚡ ${peso} votos</span>`:''}
         ${otorgantes.has(a.id)?`&nbsp;<span class="badge badge-inactive">entregó poder</span>`:''}
       </div></div>
+      <button class="btn btn-ghost btn-sm" onclick="toggleEstado('${a.id}','${a.estado}')" style="font-size:11px">${a.estado==='activo'?'⛔ Inactivar':'✅ Activar'}</button>
       <button class="btn btn-danger btn-sm btn-icon" onclick="delAsociado('${a.id}')">🗑️</button>
     </div></div>`;
   }).join('');
