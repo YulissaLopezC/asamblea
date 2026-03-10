@@ -168,7 +168,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
     </div>
     <div class="header-right">
       <div class="user-chip" id="user-chip"></div>
-      <button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button>
+      <button class="btn btn-ghost btn-sm" onclick="window._logout()">Salir</button>
     </div>
   </header>
   <nav class="tab-bar" id="tab-bar"></nav>
@@ -413,6 +413,7 @@ function renderLoginField() {
 }
 window._doLogin = doLogin;
 window._setRole = setRole;
+window._logout = logout;
 
 async function doLogin() {
   const val = document.getElementById('login-val').value.trim();
