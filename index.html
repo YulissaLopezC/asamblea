@@ -763,6 +763,23 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
       </div>
     </div>
 
+
+    <!-- ── VOTANTE: Postularse ── -->
+    <div class="section" id="sec-postularse">
+      <div id="postularse-content"></div>
+    </div>
+
+    <!-- ── ADMIN: Postulaciones ── -->
+    <div class="section" id="sec-postulaciones">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:6px">📋 Postulaciones Pendientes</div>
+        <p style="font-size:13px; color:var(--text-dim); margin-bottom:18px">
+          Aprueba o rechaza cada postulación. Las aprobadas aparecen automáticamente como candidatos en la votación.
+        </p>
+        <div id="postulaciones-admin-content"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -772,7 +789,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 // ═══════════════════════════════════════════════════════
 const CONFIG = {
   orgName:    'Mi Asociación',          // Nombre de tu asociación
-  scriptUrl:  'https://script.google.com/macros/s/AKfycbwLPTZsQkIBI7FHble3g7jL6XvAkxr3GU2bESutNWmJHjVd5lNsaeIyMVPiHxTw02Dl/exec',
+  scriptUrl:  'https://script.google.com/macros/s/AKfycbxfiwFCAge9o0s3gEkX_xABBJfajZTdfJBWOHw5NIb0t6SR56bTR8VumQWNwaOMkddI/exec',
   passAdmin:  'admin2024',              // Clave admin (también cámbiala en Code.gs)
   passMod:    'mod2024',                // Clave moderador
 };
@@ -784,7 +801,7 @@ let currentUser = null;
 let selectedRole = 'votante';
 let DB = {
   asociados: [], cargos: [], candidatos: [],
-  propuestas: [], votaciones: [], votos: [], poderes: []
+  propuestas: [], votaciones: [], votos: [], poderes: [], postulaciones: []
 };
 let voteSel = {}; // votacionId -> opcionId
 let refreshTimer = null;
@@ -898,18 +915,19 @@ function logout() {
 //  DATA LOADING
 // ═══════════════════════════════════════════════════════
 async function loadAll() {
-  const [a, cg, cd, p, v, vt, pd] = await Promise.all([
+  const [a, cg, cd, p, v, vt, pd, ps] = await Promise.all([
     api('getAsociados'), api('getCargos'), api('getCandidatos'),
     api('getPropuestas'), api('getVotaciones'), api('getVotos', {}),
-    api('getPoderes')
+    api('getPoderes'), api('getPostulaciones')
   ]);
-  DB.asociados  = a.data  || [];
-  DB.cargos     = cg.data || [];
-  DB.candidatos = cd.data || [];
-  DB.propuestas = p.data  || [];
-  DB.votaciones = v.data  || [];
-  DB.votos      = vt.data || [];
-  DB.poderes    = pd.data || [];
+  DB.asociados      = a.data  || [];
+  DB.cargos         = cg.data || [];
+  DB.candidatos     = cd.data || [];
+  DB.propuestas     = p.data  || [];
+  DB.votaciones     = v.data  || [];
+  DB.votos          = vt.data || [];
+  DB.poderes        = pd.data || [];
+  DB.postulaciones  = ps.data || [];
 }
 
 async function refreshData() {
@@ -928,15 +946,16 @@ function startRefresh() {
 //  TABS
 // ═══════════════════════════════════════════════════════
 const TABS_DEF = {
-  votante:   [{ id: 'votar', label: '🗳️ Votar' }, { id: 'resultados', label: '📊 Resultados' }],
+  votante:   [{ id: 'votar', label: '🗳️ Votar' }, { id: 'postularse', label: '🙋 Postularme' }, { id: 'resultados', label: '📊 Resultados' }],
   moderador: [{ id: 'moderador', label: '⚖️ Control' }, { id: 'resultados', label: '📊 Resultados' }],
   admin: [
-    { id: 'asociados', label: '👥 Asociados' },
-    { id: 'poderes',   label: '⚡ Poderes' },
-    { id: 'cargos',    label: '🏅 Cargos' },
-    { id: 'propuestas',label: '📝 Propuestas' },
-    { id: 'votaciones',label: '🗳️ Votaciones' },
-    { id: 'resultados',label: '📊 Resultados' },
+    { id: 'asociados',     label: '👥 Asociados' },
+    { id: 'poderes',       label: '⚡ Poderes' },
+    { id: 'cargos',        label: '🏅 Cargos' },
+    { id: 'postulaciones', label: '📋 Postulaciones' },
+    { id: 'propuestas',    label: '📝 Propuestas' },
+    { id: 'votaciones',    label: '🗳️ Votaciones' },
+    { id: 'resultados',    label: '📊 Resultados' },
   ],
 };
 
@@ -982,6 +1001,8 @@ function renderAll() {
   renderVotacionesAdmin();
   renderVotSubtipo();
   renderVotar();
+  renderPostularse();
+  renderPostulacionesAdmin();
   renderModerador();
   renderResultados();
 }
@@ -1535,6 +1556,143 @@ function renderResultados() {
       }).join('')}
     </div>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  POSTULARSE (votante)
+// ═══════════════════════════════════════════════════════
+function renderPostularse() {
+  const c = document.getElementById('postularse-content'); if (!c) return;
+  if (!DB.cargos.length) {
+    c.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">🏅</div><div class="empty-text">El administrador aún no ha creado los cargos disponibles.</div></div></div>';
+    return;
+  }
+  // Ver postulaciones actuales del usuario
+  const misPost = DB.postulaciones.filter(p => p.asociadoId === currentUser.id);
+
+  c.innerHTML = '<div class="card"><div class="card-title" style="margin-bottom:16px">🙋 Postularme a un cargo</div>' +
+    DB.cargos.map(cargo => {
+      const yaPostulado = misPost.find(p => p.cargoId === cargo.id);
+      const candidatoAprobado = DB.candidatos.find(cd => cd.cargoId === cargo.id && cd.asociadoId === currentUser.id);
+      let estado = '';
+      if (candidatoAprobado) {
+        estado = '<span class="badge badge-active">✅ Aprobado</span>';
+      } else if (yaPostulado) {
+        estado = `<span class="badge badge-pending">⏳ ${yaPostulado.estado === 'rechazado' ? '❌ Rechazado' : 'Pendiente de aprobación'}</span>`;
+      }
+      return `
+      <div class="list-item" style="margin-bottom:10px">
+        <div class="list-item-row">
+          <div>
+            <div class="list-item-name">🏅 ${cargo.nombre}</div>
+            ${estado ? '<div style="margin-top:6px">'+estado+'</div>' : ''}
+          </div>
+          ${!yaPostulado && !candidatoAprobado
+            ? `<button class="btn btn-primary btn-sm" onclick="postularse('${cargo.id}')">🙋 Postularme</button>`
+            : (yaPostulado && yaPostulado.estado !== 'rechazado'
+                ? `<button class="btn btn-ghost btn-sm" onclick="retirarPostulacion('${yaPostulado.id}')">Retirar</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="postularse('${cargo.id}')">🙋 Volver a postular</button>`)
+          }
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+async function postularse(cargoId) {
+  setLoading(true);
+  const r = await api('addPostulacion', { cargoId, asociadoId: currentUser.id, nombre: currentUser.nombre });
+  setLoading(false);
+  if (!r.ok) { toast('❌ ' + r.error); return; }
+  const ps = await api('getPostulaciones');
+  DB.postulaciones = ps.data || [];
+  renderPostularse();
+  toast('✅ Postulación enviada — pendiente de aprobación');
+}
+
+async function retirarPostulacion(id) {
+  if (!confirm('¿Retirar tu postulación?')) return;
+  setLoading(true);
+  await api('deletePostulacion', { id });
+  const ps = await api('getPostulaciones');
+  setLoading(false);
+  DB.postulaciones = ps.data || [];
+  renderPostularse();
+  toast('🗑️ Postulación retirada');
+}
+
+// ═══════════════════════════════════════════════════════
+//  POSTULACIONES ADMIN
+// ═══════════════════════════════════════════════════════
+function renderPostulacionesAdmin() {
+  const c = document.getElementById('postulaciones-admin-content'); if (!c) return;
+  const pendientes = DB.postulaciones.filter(p => p.estado === 'pendiente');
+  const aprobadas  = DB.postulaciones.filter(p => p.estado === 'aprobado');
+  const rechazadas = DB.postulaciones.filter(p => p.estado === 'rechazado');
+
+  if (!DB.postulaciones.length) {
+    c.innerHTML = '<div class="empty-state"><div class="empty-icon">🙋</div><div class="empty-text">No hay postulaciones aún</div></div>';
+    return;
+  }
+
+  const renderGrupo = (lista, titulo) => {
+    if (!lista.length) return '';
+    return `<div class="section-sep" style="margin-top:14px">${titulo}</div>` +
+      lista.map(p => {
+        const cargo = DB.cargos.find(c => c.id === p.cargoId);
+        return `
+        <div class="list-item" style="margin-bottom:8px">
+          <div class="list-item-row">
+            <div>
+              <div class="list-item-name">${p.nombre}</div>
+              <div class="list-item-meta">Cargo: ${cargo?.nombre || '?'}</div>
+            </div>
+            <div class="list-item-actions">
+              ${p.estado === 'pendiente' ? `
+                <button class="btn btn-success btn-sm" onclick="aprobarPost('${p.id}')">✅</button>
+                <button class="btn btn-danger btn-sm"  onclick="rechazarPost('${p.id}')">❌</button>
+              ` : `<button class="btn btn-ghost btn-sm" onclick="deletePostAdmin('${p.id}')">🗑️</button>`}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+  };
+
+  c.innerHTML =
+    renderGrupo(pendientes, '⏳ Pendientes') +
+    renderGrupo(aprobadas,  '✅ Aprobadas') +
+    renderGrupo(rechazadas, '❌ Rechazadas');
+}
+
+async function aprobarPost(id) {
+  setLoading(true);
+  const r = await api('aprobarPostulacion', { id });
+  setLoading(false);
+  if (!r.ok) { toast('❌ ' + r.error); return; }
+  const [ps, cd] = await Promise.all([api('getPostulaciones'), api('getCandidatos')]);
+  DB.postulaciones = ps.data || [];
+  DB.candidatos    = cd.data || [];
+  renderPostulacionesAdmin(); renderCargosList();
+  toast('✅ Postulación aprobada — ya aparece como candidato');
+}
+
+async function rechazarPost(id) {
+  setLoading(true);
+  await api('rechazarPostulacion', { id });
+  setLoading(false);
+  const ps = await api('getPostulaciones');
+  DB.postulaciones = ps.data || [];
+  renderPostulacionesAdmin();
+  toast('❌ Postulación rechazada');
+}
+
+async function deletePostAdmin(id) {
+  setLoading(true);
+  await api('deletePostulacion', { id });
+  const ps = await api('getPostulaciones');
+  setLoading(false);
+  DB.postulaciones = ps.data || [];
+  renderPostulacionesAdmin();
+  toast('🗑️ Eliminada');
 }
 </script>
 </body>
