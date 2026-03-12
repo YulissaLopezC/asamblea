@@ -933,21 +933,43 @@ function renderModerador() {
   const c = document.getElementById('mod-content'); if (!c) return;
   if (!DB.votaciones.length) { c.innerHTML='<div class="empty-state"><div class="empty-icon">🗳️</div><div class="empty-text">Sin votaciones creadas aún</div></div>'; return; }
   const totalPeso = calcTotalPeso();
-  c.innerHTML = DB.votaciones.map(v => {
+
+  // Orden: abiertas → pendientes → cerradas
+  const orden = { abierta: 0, pendiente: 1, cerrada: 2 };
+  const sorted = [...DB.votaciones].sort((a,b) => orden[a.estado] - orden[b.estado]);
+
+  c.innerHTML = sorted.map(v => {
     const emitidos = DB.votos.filter(vt=>vt.votacionId===v.id).reduce((s,vt)=>s+(parseInt(vt.peso)||1),0);
-    const pct = totalPeso>0?Math.round(emitidos/totalPeso*100):0;
+    const pct = totalPeso>0 ? Math.round(emitidos/totalPeso*100) : 0;
+    const barColor = v.estado==='abierta'
+      ? 'linear-gradient(90deg,var(--green),var(--green-lt))'
+      : v.estado==='cerrada'
+        ? 'linear-gradient(90deg,#888,#aaa)'
+        : 'linear-gradient(90deg,var(--gold),var(--gold-lt))';
+
     return `<div class="mod-card ${v.estado==='abierta'?'is-open':''}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
-        <div><div style="font-weight:600;font-size:15px;margin-bottom:4px">${v.nombre}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+        <div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">${v.nombre}</div>
           <div style="font-size:12px;color:var(--text-dim)">
             <span class="badge ${v.estado==='abierta'?'badge-open':v.estado==='cerrada'?'badge-closed':'badge-pending'}">${v.estado}</span>
-            &nbsp; ${emitidos}/${totalPeso} votos (${pct}%)
+            &nbsp; ${emitidos} de ${totalPeso} votos (${pct}%)
           </div>
         </div>
       </div>
+      ${v.estado !== 'pendiente' ? `
+      <div style="margin-bottom:12px">
+        <div class="result-bar">
+          <div class="result-fill" style="width:${Math.min(pct,100)}%;background:${barColor};transition:width 0.4s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-top:4px">
+          <span>${emitidos} emitido${emitidos!==1?'s':''}</span>
+          <span>${totalPeso - emitidos} pendiente${(totalPeso-emitidos)!==1?'s':''}</span>
+        </div>
+      </div>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${v.estado==='pendiente'?`<button class="btn btn-success btn-sm" onclick="setEstadoVot('${v.id}','abierta')">▶️ Abrir</button>`:''}
-        ${v.estado==='abierta'?`<button class="btn btn-danger btn-sm" onclick="setEstadoVot('${v.id}','cerrada')">⏹️ Cerrar</button>`:''}
+        ${v.estado==='pendiente'?`<button class="btn btn-success btn-sm" onclick="setEstadoVot('${v.id}','abierta')">▶️ Abrir votación</button>`:''}
+        ${v.estado==='abierta'?`<button class="btn btn-danger btn-sm" onclick="setEstadoVot('${v.id}','cerrada')">⏹️ Cerrar votación</button>`:''}
         ${v.estado==='cerrada'?`<button class="btn btn-outline btn-sm" onclick="setEstadoVot('${v.id}','abierta')">🔄 Reabrir</button>`:''}
       </div>
     </div>`;
