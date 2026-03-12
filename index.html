@@ -251,8 +251,16 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
       <div class="card">
         <div class="card-title" style="margin-bottom:6px">⚡ Asignar Poder</div>
         <p style="font-size:13px;color:var(--text-dim);margin-bottom:18px">Quien recibe el poder vota con mayor peso. Quien entrega no asiste.</p>
-        <div class="field"><label>Quien RECIBE el poder</label><select id="poder-receptor"></select></div>
-        <div class="field"><label>Quien ENTREGA el poder</label><select id="poder-otorgante"></select></div>
+        <div class="field">
+          <label>Quien RECIBE el poder</label>
+          <input id="buscar-receptor" placeholder="🔍 Escriba nombre o cédula..." oninput="window._filtrarPoder('receptor')" autocomplete="off" style="margin-bottom:6px">
+          <select id="poder-receptor" size="4" style="height:auto;min-height:80px;border-radius:8px;padding:4px"></select>
+        </div>
+        <div class="field">
+          <label>Quien ENTREGA el poder</label>
+          <input id="buscar-otorgante" placeholder="🔍 Escriba nombre o cédula..." oninput="window._filtrarPoder('otorgante')" autocomplete="off" style="margin-bottom:6px">
+          <select id="poder-otorgante" size="4" style="height:auto;min-height:80px;border-radius:8px;padding:4px"></select>
+        </div>
         <button class="btn btn-primary" onclick="asignarPoder()">⚡ Asignar Poder</button>
       </div>
       <div class="card">
@@ -730,12 +738,35 @@ window._irPagAs = function(pag) {
 };
 
 // ── PODERES ───────────────────────────────────────────
+function _opcionesPoderFiltradas(q) {
+  const activos = DB.asociados.filter(a => a.estado === 'activo');
+  const term = (q||'').toLowerCase().trim();
+  const filtrados = term
+    ? activos.filter(a => a.nombre.toLowerCase().includes(term) || a.doc.includes(term))
+    : activos;
+  return filtrados.map(a => `<option value="${a.id}">${a.nombre} (${a.doc})</option>`).join('');
+}
+window._filtrarPoder = function(cual) {
+  const inputId  = cual === 'receptor' ? 'buscar-receptor' : 'buscar-otorgante';
+  const selectId = cual === 'receptor' ? 'poder-receptor'  : 'poder-otorgante';
+  const q   = document.getElementById(inputId)?.value || '';
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const opts = _opcionesPoderFiltradas(q);
+  sel.innerHTML = opts || '<option disabled>Sin resultados</option>';
+};
 function renderPoderesSelects() {
-  const activos = DB.asociados.filter(a=>a.estado==='activo');
-  const opts = activos.map(a=>`<option value="${a.id}">${a.nombre} (${a.doc})</option>`).join('');
-  const s1=document.getElementById('poder-receptor'), s2=document.getElementById('poder-otorgante');
-  if(s1) s1.innerHTML = opts||'<option>Sin asociados activos</option>';
-  if(s2) s2.innerHTML = opts||'<option>Sin asociados activos</option>';
+  const opts = _opcionesPoderFiltradas('');
+  const fallback = '<option disabled>Sin asociados activos</option>';
+  const s1 = document.getElementById('poder-receptor');
+  const s2 = document.getElementById('poder-otorgante');
+  // Limpiar búsquedas al recargar
+  const b1 = document.getElementById('buscar-receptor');
+  const b2 = document.getElementById('buscar-otorgante');
+  if (b1) b1.value = '';
+  if (b2) b2.value = '';
+  if (s1) s1.innerHTML = opts || fallback;
+  if (s2) s2.innerHTML = opts || fallback;
 }
 window.asignarPoder = async function() {
   const receptorId  = document.getElementById('poder-receptor').value;
