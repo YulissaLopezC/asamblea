@@ -124,7 +124,18 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
 .toast.show{opacity:1}
 .realtime-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block;margin-right:6px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
-@media(max-width:480px){.login-box{padding:24px 20px}.row{flex-direction:column;gap:0}.header-name{font-size:16px}}
+@media(max-width:480px){
+  .login-box{padding:24px 20px}
+  .row{flex-direction:column;gap:0}
+  .app-header{height:auto;min-height:52px;padding:6px 12px;flex-wrap:nowrap;gap:6px}
+  .header-name{font-size:14px}
+  .header-sub{font-size:9px}
+  .app-header > div:first-child img{height:28px}
+  .app-header > div:first-child{gap:7px}
+  .header-right{gap:5px;flex-shrink:0}
+  .user-chip{max-width:100px;font-size:11px;padding:4px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .btn-ghost.btn-sm{font-size:11px;padding:5px 10px;white-space:nowrap;flex-shrink:0}
+}
 </style>
 </head>
 <body>
@@ -159,14 +170,14 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
 <!-- APP -->
 <div id="app">
   <header class="app-header">
-    <div style="display:flex;align-items:center;gap:10px">
-      <img src="Logo Capitulo Eje Cafetero_Mediano.png" style="height:38px">
-      <div>
-        <div class="header-name" id="header-org">Asamblea</div>
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden">
+      <img src="Logo Capitulo Eje Cafetero_Mediano.png" style="height:38px;flex-shrink:0">
+      <div style="min-width:0;overflow:hidden">
+        <div class="header-name" id="header-org" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Asamblea</div>
         <div class="header-sub"><span class="realtime-dot"></span>En vivo</div>
       </div>
     </div>
-    <div class="header-right">
+    <div class="header-right" style="flex-shrink:0">
       <div class="user-chip" id="user-chip"></div>
       <button class="btn btn-ghost btn-sm" onclick="window._logout()">Salir</button>
     </div>
