@@ -229,8 +229,20 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
           <div class="card-title">👥 Padrón</div>
           <span id="as-count" style="font-size:12px;color:var(--text-dim)"></span>
         </div>
-        <input id="buscar-as" placeholder="🔍 Buscar..." oninput="window._renderAsociados()" style="margin-bottom:14px">
+        <!-- Búsqueda + Filtro -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <input id="buscar-as" placeholder="🔍 Buscar por nombre o cédula..." oninput="window._resetPagAsociados();window._renderAsociados()" style="flex:1;min-width:180px;margin-bottom:0">
+          <select id="filtro-estado-as" onchange="window._resetPagAsociados();window._renderAsociados()" style="min-width:140px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--card-bg);color:var(--text);font-size:13px;cursor:pointer">
+            <option value="todos">Todos</option>
+            <option value="activo">✅ Solo activos</option>
+            <option value="inactivo">⛔ Solo inactivos</option>
+          </select>
+        </div>
+        <!-- Contador rápido por estado -->
+        <div id="as-badges" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;"></div>
         <div id="asociados-list"></div>
+        <!-- Paginación -->
+        <div id="as-pagination" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap;"></div>
       </div>
     </div>
 
@@ -620,16 +632,57 @@ window.delAsociado = async function(id) {
   renderAsociados(); renderPoderesSelects();
   toast('🗑️ Eliminado');
 };
+// ── PAGINACIÓN PADRÓN ────────────────────────────────
+let _paginaAsociados = 0;
+const _POR_PAGINA = 10;
+window._resetPagAsociados = function() { _paginaAsociados = 0; };
+
 function renderAsociados() {
   const c = document.getElementById('asociados-list'); if (!c) return;
-  const q = (document.getElementById('buscar-as')?.value||'').toLowerCase();
-  const list = DB.asociados.filter(a=>a.nombre.toLowerCase().includes(q)||a.doc.includes(q));
-  const activos = DB.asociados.filter(a=>a.estado==='activo').length;
+  const q      = (document.getElementById('buscar-as')?.value||'').toLowerCase().trim();
+  const filtro = document.getElementById('filtro-estado-as')?.value || 'todos';
+
+  // Filtrar
+  let list = DB.asociados.filter(a => {
+    const matchQ = !q || a.nombre.toLowerCase().includes(q) || a.doc.includes(q);
+    const matchE = filtro === 'todos' || a.estado === filtro;
+    return matchQ && matchE;
+  });
+
+  // Ordenar: activos primero, luego alfabético
+  list.sort((a,b) => {
+    if (a.estado !== b.estado) return a.estado === 'activo' ? -1 : 1;
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  // Contadores
+  const totalActivos   = DB.asociados.filter(a=>a.estado==='activo').length;
+  const totalInactivos = DB.asociados.filter(a=>a.estado==='inactivo').length;
   const cnt = document.getElementById('as-count');
-  if (cnt) cnt.textContent = `${activos} activos · ${DB.asociados.length} total`;
-  if (!list.length) { c.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">Sin asociados</div></div>'; return; }
+  if (cnt) cnt.textContent = `${totalActivos} activos · ${totalInactivos} inactivos · ${DB.asociados.length} total`;
+
+  // Badges resumen
+  const badges = document.getElementById('as-badges');
+  if (badges) badges.innerHTML = `
+    <span style="background:#d4edda;color:#1e6e3c;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600">✅ ${totalActivos} activos</span>
+    <span style="background:#f8d7da;color:#842029;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600">⛔ ${totalInactivos} inactivos</span>
+    ${list.length !== DB.asociados.length ? `<span style="background:#fff3cd;color:#664d03;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600">🔍 ${list.length} resultado${list.length!==1?'s':''}</span>` : ''}
+  `;
+
+  if (!list.length) {
+    c.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">Sin resultados</div></div>';
+    document.getElementById('as-pagination').innerHTML = '';
+    return;
+  }
+
+  // Paginación
+  const totalPags = Math.ceil(list.length / _POR_PAGINA);
+  if (_paginaAsociados >= totalPags) _paginaAsociados = totalPags - 1;
+  const inicio = _paginaAsociados * _POR_PAGINA;
+  const pagina = list.slice(inicio, inicio + _POR_PAGINA);
+
   const otorgantes = new Set(DB.poderes.map(p=>p.otorganteId));
-  c.innerHTML = list.map(a => {
+  c.innerHTML = pagina.map(a => {
     const peso = calcPesoAsociado(a.id);
     return `<div class="list-item"><div class="list-item-row"><div>
       <div class="list-item-name">${a.nombre}</div>
@@ -642,7 +695,39 @@ function renderAsociados() {
       <button class="btn btn-danger btn-sm btn-icon" onclick="delAsociado('${a.id}')">🗑️</button>
     </div></div>`;
   }).join('');
+
+  // Render paginación
+  const pag = document.getElementById('as-pagination');
+  if (totalPags <= 1) { pag.innerHTML = ''; return; }
+
+  const btnStyle = (activo) => `style="padding:6px 13px;border-radius:8px;border:1.5px solid var(--border);background:${activo?'var(--primary)':'var(--card-bg)'};color:${activo?'#fff':'var(--text)'};font-weight:${activo?'700':'400'};cursor:pointer;font-size:13px"`;
+  let pagHtml = `<button onclick="window._irPagAs(${_paginaAsociados-1})" ${_paginaAsociados===0?'disabled':''} style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-size:13px">◀</button>`;
+
+  // Mostrar máximo 5 páginas alrededor de la actual
+  let desde = Math.max(0, _paginaAsociados - 2);
+  let hasta  = Math.min(totalPags - 1, desde + 4);
+  if (hasta - desde < 4) desde = Math.max(0, hasta - 4);
+
+  for (let i = desde; i <= hasta; i++) {
+    pagHtml += `<button onclick="window._irPagAs(${i})" ${btnStyle(i===_paginaAsociados)}>${i+1}</button>`;
+  }
+  pagHtml += `<button onclick="window._irPagAs(${_paginaAsociados+1})" ${_paginaAsociados===totalPags-1?'disabled':''} style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-size:13px">▶</button>`;
+  pagHtml += `<span style="font-size:12px;color:var(--text-dim);margin-left:4px">Página ${_paginaAsociados+1} de ${totalPags}</span>`;
+  pag.innerHTML = pagHtml;
 }
+
+window._irPagAs = function(pag) {
+  const totalPags = Math.ceil(
+    DB.asociados.filter(a => {
+      const q = (document.getElementById('buscar-as')?.value||'').toLowerCase().trim();
+      const f = document.getElementById('filtro-estado-as')?.value || 'todos';
+      return (!q || a.nombre.toLowerCase().includes(q) || a.doc.includes(q)) && (f==='todos'||a.estado===f);
+    }).length / _POR_PAGINA
+  );
+  if (pag < 0 || pag >= totalPags) return;
+  _paginaAsociados = pag;
+  renderAsociados();
+};
 
 // ── PODERES ───────────────────────────────────────────
 function renderPoderesSelects() {
