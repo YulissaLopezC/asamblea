@@ -1293,67 +1293,69 @@ window.quitarAsistencia = async function(id) {
 
 // ── EXPORTAR ASOCIADOS CSV ───────────────────────────
 window.exportarAsociadosCSV = function() {
-  if (!DB.asociados.length) { toast('⚠️ No hay asociados registrados'); return; }
-  const fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'2-digit',day:'2-digit'});
-  const sorted = [...DB.asociados].sort((a,b) => a.nombre.localeCompare(b.nombre));
-  let csv = 'N°,Nombre,Cédula,Estado
-';
-  sorted.forEach((a, i) => {
-    csv += `${i+1},"${a.nombre}","${a.doc}","${a.estado}"
-`;
-  });
-  const activos   = sorted.filter(a => a.estado === 'activo').length;
-  const inactivos = sorted.filter(a => a.estado === 'inactivo').length;
-  csv += `
-"TOTAL","${sorted.length}","",""
-`;
-  csv += `"ACTIVOS","${activos}","",""
-`;
-  csv += `"INACTIVOS","${inactivos}","",""
-`;
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url;
-  a.download = `Asociados_SCMT_${fecha.replace(/\//g,'-')}.csv`;
-  a.click();
+  if (!DB.asociados.length) { toast('Sin asociados'); return; }
+  var fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'2-digit',day:'2-digit'});
+  var sorted = DB.asociados.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  var NL = '\n';
+  var csv = 'N,Nombre,Cedula,Estado' + NL;
+  for (var i=0; i<sorted.length; i++) {
+    var a = sorted[i];
+    csv += (i+1) + ',' + a.nombre + ',' + a.doc + ',' + a.estado + NL;
+  }
+  var activos   = sorted.filter(function(a){ return a.estado==='activo'; }).length;
+  var inactivos = sorted.filter(function(a){ return a.estado==='inactivo'; }).length;
+  csv += NL + 'TOTAL,' + sorted.length + ',,' + NL;
+  csv += 'ACTIVOS,' + activos + ',,' + NL;
+  csv += 'INACTIVOS,' + inactivos + ',,' + NL;
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = 'Asociados_SCMT_' + fecha.replace(/\//g, '-') + '.csv';
+  link.click();
   URL.revokeObjectURL(url);
-  toast('✅ Padrón exportado');
+  toast('Padron exportado');
 };
 
 // ── DESCARGAR ASISTENCIA CSV ─────────────────────────
 window.descargarAsistenciaCSV = function() {
-  if (!DB.asistencias.length) { toast('⚠️ No hay asistentes registrados'); return; }
-  const otorgantes = new Set(DB.poderes.map(p => p.otorganteId));
-  const fecha = new Date().toLocaleDateString('es-CO', {year:'numeric',month:'2-digit',day:'2-digit'});
-  let csv = 'N°,Nombre,Cédula,Estado,Votos Representados,Entregó Poder,Hora Registro\n';
-  const sorted = [...DB.asistencias].sort((a,b) => {
-    const na = DB.asociados.find(x=>x.id===a.asociadoId)?.nombre || '';
-    const nb = DB.asociados.find(x=>x.id===b.asociadoId)?.nombre || '';
+  if (!DB.asistencias.length) { toast('Sin asistentes'); return; }
+  var otorgantes = {};
+  DB.poderes.forEach(function(p){ otorgantes[p.otorganteId] = true; });
+  var fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'2-digit',day:'2-digit'});
+  var NL = '\n';
+  var csv = 'N,Nombre,Cedula,Estado,Votos,EntregoPoder,Hora' + NL;
+  var sorted = DB.asistencias.slice().sort(function(a,b){
+    var na = '', nb = '';
+    var aa = DB.asociados.find(function(x){ return x.id===a.asociadoId; });
+    var bb = DB.asociados.find(function(x){ return x.id===b.asociadoId; });
+    if (aa) na = aa.nombre;
+    if (bb) nb = bb.nombre;
     return na.localeCompare(nb);
   });
-  sorted.forEach((a, i) => {
-    const as = DB.asociados.find(x => x.id === a.asociadoId);
+  var n = 0;
+  sorted.forEach(function(a) {
+    var as = DB.asociados.find(function(x){ return x.id===a.asociadoId; });
     if (!as) return;
-    const peso = calcPesoAsociado(a.asociadoId);
-    const entregoPoder = otorgantes.has(a.asociadoId) ? 'Sí' : 'No';
-    const hora = a._ts ? new Date(a._ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
-    csv += `${i+1},"${as.nombre}","${as.doc}","${as.estado}",${peso},"${entregoPoder}","${hora}"\n`;
+    n++;
+    var peso = calcPesoAsociado(a.asociadoId);
+    var entrego = otorgantes[a.asociadoId] ? 'Si' : 'No';
+    var hora = a._ts ? new Date(a._ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
+    csv += n + ',' + as.nombre + ',' + as.doc + ',' + as.estado + ',' + peso + ',' + entrego + ',' + hora + NL;
   });
-  // Totales al final
-  const q = calcQuorum();
-  csv += `\n"TOTAL ASISTENTES","${q.personasPresentes}","","","${q.pesoPresente} votos representados","",""\n`;
-  csv += `"QUÓRUM NECESARIO","${q.quorumNecesario}","","","","",""\n`;
-  csv += `"QUÓRUM ALCANZADO","${q.quorumAlcanzado ? 'SÍ' : 'NO'}","","","","",""\n`;
-
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url;
-  a.download = `Asistencia_SCMT_${fecha.replace(/\//g,'-')}.csv`;
-  a.click();
+  var q = calcQuorum();
+  csv += NL + 'TOTAL ASISTENTES,' + q.personasPresentes + ',,,,,' + NL;
+  csv += 'VOTOS REPRESENTADOS,' + q.pesoPresente + ',,,,,' + NL;
+  csv += 'QUORUM NECESARIO,' + q.quorumNecesario + ',,,,,' + NL;
+  csv += 'QUORUM ALCANZADO,' + (q.quorumAlcanzado ? 'SI' : 'NO') + ',,,,,' + NL;
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = 'Asistencia_SCMT_' + fecha.replace(/\//g, '-') + '.csv';
+  link.click();
   URL.revokeObjectURL(url);
-  toast('✅ Lista de asistencia descargada');
+  toast('Lista de asistencia descargada');
 };
 
 // ── EXPORTAR CSV ──────────────────────────────────────
