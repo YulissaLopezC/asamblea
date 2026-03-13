@@ -239,7 +239,10 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
       <div class="card">
         <div class="card-head">
           <div class="card-title">👥 Padrón</div>
-          <span id="as-count" style="font-size:12px;color:var(--text-dim)"></span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="as-count" style="font-size:12px;color:var(--text-dim)"></span>
+            <button class="btn btn-ghost btn-sm" onclick="window.exportarAsociadosCSV()" style="font-size:12px">⬇️ Exportar CSV</button>
+          </div>
         </div>
         <!-- Búsqueda + Filtro -->
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
@@ -1286,6 +1289,36 @@ window.quitarAsistencia = async function(id) {
   await fsDel('asistencias', id);
   DB.asistencias = await fsGet('asistencias');
   renderQuorum(); toast('🗑️ Asistencia eliminada');
+};
+
+// ── EXPORTAR ASOCIADOS CSV ───────────────────────────
+window.exportarAsociadosCSV = function() {
+  if (!DB.asociados.length) { toast('⚠️ No hay asociados registrados'); return; }
+  const fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'2-digit',day:'2-digit'});
+  const sorted = [...DB.asociados].sort((a,b) => a.nombre.localeCompare(b.nombre));
+  let csv = 'N°,Nombre,Cédula,Estado
+';
+  sorted.forEach((a, i) => {
+    csv += `${i+1},"${a.nombre}","${a.doc}","${a.estado}"
+`;
+  });
+  const activos   = sorted.filter(a => a.estado === 'activo').length;
+  const inactivos = sorted.filter(a => a.estado === 'inactivo').length;
+  csv += `
+"TOTAL","${sorted.length}","",""
+`;
+  csv += `"ACTIVOS","${activos}","",""
+`;
+  csv += `"INACTIVOS","${inactivos}","",""
+`;
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `Asociados_SCMT_${fecha.replace(/\//g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ Padrón exportado');
 };
 
 // ── DESCARGAR ASISTENCIA CSV ─────────────────────────
